@@ -1,0 +1,732 @@
+---
+title: "Deconvolution analysis of NanoString HH-cohort data"
+author: "Zhiyuan Hu"
+date: "31/10/2019"
+output: 
+    html_document:
+        toc: true
+        number_sections: true
+        theme: united
+---
+
+
+```{r setup, include=FALSE, cache=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = FALSE, fig.width = 6, fig.height = 4, warning = F)
+
+# devtools::install_github('shenorrlab/bseq-sc')
+# devtools::install_github('shenorrlab/csSAM')
+library(bseqsc)
+
+library(MASS)
+library(xbioc)
+library(e1071) #svm
+library(preprocessCore)
+
+library(survminer)
+library(survival)
+# library(powerSurvEpi)
+library(Biobase)
+# BiocManager::install("SingleCellExperiment")
+# BiocManager::install("scater")
+# library(SingleCellExperiment)
+# library(scater)
+
+library(ggbeeswarm)
+library(ggrepel)
+library(viridis)
+library(ggplot2)
+library(cowplot)
+library(ggpubr)
+
+# library(edgeR)
+# library(limma)
+# library(copynumber)
+
+source("../nanostring/codings/modified_functions20190204.R")
+```
+
+
+# Load data
+
+```{r}
+sig_matrix_new <-  read.csv("../TableS7_selected_signature_matrix_52genes20190204.csv", as.is = T, row.names = 1)
+sig_matrix_new <- as.matrix(sig_matrix_new)
+```
+
+
+```{r}
+counts <- read.csv("../HH001-150_NormalizedData_cleaned.csv", as.is = T, row.names = 1)
+
+rownames(counts)[7] <- "MLF1IP"
+
+colnames(counts) <- gsub(pattern = "HH", replacement = "HH-", x = colnames(counts))
+colnames(counts) <- gsub(pattern = "[.]", replacement = "", x = colnames(counts))
+counts[1:5,1:5]
+# counts <- read.csv("../HH_cohort/HH001-150_Rawdata_cleaned.csv", as.is = T, row.names = 1)
+# counts[1:5,1:5]
+```
+
+
+
+```{r}
+clic_dt <- readxl::read_xlsx("../clinical_data.xlsx")
+colnames(clic_dt) <- gsub(pattern = " ", replacement = "_", x = colnames(clic_dt))
+clic_dt$Overall_survival <- as.numeric(clic_dt$Overall_survival)
+clic_dt$Event <- as.numeric(clic_dt$Event)
+head(clic_dt)
+```
+
+```{r}
+sum(rownames(counts) %in% rownames(sig_matrix_new))
+```
+
+# Deconvolution
+
+```{r, fig.height=10}
+cibersort_fit <- cibersort_my(sig_matrix = sig_matrix_new, exprs_unlogged = counts)
+# cibersort_fit2 <- cibersort_my(sig_matrix = sig_matrix, exprs_unlogged = counts)
+
+# write.csv(nanostring_fit, file = "results/cibersort_HHcohort150_output.csv")
+colnames(cibersort_fit)[c(1,2,4,5)] <- c("Differentiated","KRT17","Cell_cycle","Ciliated")
+
+clic_dt <- cbind(clic_dt, cibersort_fit[match(clic_dt$Anonymised_code, rownames(cibersort_fit)),])
+```
+
+# Filtering
+
+```{r}
+dim(clic_dt) # 150 patients
+```
+
+```{r}
+hist(clic_dt$EMT, 20); abline(v = 0.95)
+```
+
+
+```{r filtering}
+table(clic_dt$EMT < 0.95)
+# FALSE  TRUE 
+#     2   148 
+clic_filtered <- clic_dt[clic_dt$EMT < 0.95,]
+dim(clic_filtered)
+
+table(clic_filtered$Summary_histology) 
+clic_filtered <- clic_filtered[clic_filtered$Summary_histology != "Endometrial serous carcinoma",] # remove Endometrial serous carcinoma
+dim(clic_filtered)
+
+clic_filtered$Event[clic_filtered$Overall_survival == 29] <- 0 # die from compliments; 1 patient
+dim(clic_filtered)
+
+sum(is.na(clic_filtered$Summary_grade) | is.na(clic_filtered$Summary_stage)) # 19 missing grade or stage information
+clic_filtered <- clic_filtered[!is.na(clic_filtered$Summary_grade) & !is.na(clic_filtered$Summary_stage),]
+dim(clic_filtered)
+
+sum(is.na(clic_filtered$Overall_survival)) # 6 dont have survival info
+clic_filtered <- clic_filtered[!is.na(clic_filtered$Overall_survival),]
+
+dim(clic_filtered)
+```
+
+# Survival analysis
+
+## Single-variate analysis
+
+```{r single-variate}
+surv_fit <- coxph(Surv(Overall_survival, Event)~EMT, data=as.data.frame(clic_filtered))
+summary(surv_fit)
+```
+
+## Multiple-variate analysis
+
+```{r multivariate}
+surv_fit <- coxph(Surv(Overall_survival, Event)~EMT+Summary_grade+Summary_stage, data=as.data.frame(clic_filtered))
+summary(surv_fit)
+```
+
+```{r}
+# xlsx::write.xlsx(clic_filtered,"results/clincData_deconRes_filtered20191106.xlsx")
+```
+
+
+```{r multivariate-res-table}
+res_tb <- data.frame(Variate = c("EMT","Grade","Stage"),
+                     Hazard_ratio = summary(surv_fit)$coefficients[,2],
+                     p = summary(surv_fit)$coefficients[,5],
+                     CI_low = summary(surv_fit)$conf.int[,3],
+                     CI_high = summary(surv_fit)$conf.int[,4])
+res_tb$Hazard_ratio[2] <- 1/res_tb$Hazard_ratio[2]
+res_tb[2, 4:5] <- 1/res_tb[2,c(5,4)]
+# write.csv(res_tb, "results/survival_Fitres_HH20191106.csv", row.names = F)
+knitr::kable(res_tb)
+```
+
+## Dichotomisation
+
+The following coding tested which cutoff of dichotomisation gives the lowest p value.
+
+```{r}
+surv_rls <- matrix(0, nrow = 1, ncol = 3)
+for (i in seq(0.08, 0.57, 0.005)) {
+  clic_filtered$emt_group <- NA
+  clic_filtered$emt_group[clic_filtered$EMT <= i] <- "low"
+  clic_filtered$emt_group[clic_filtered$EMT > i] <- "high"
+  fit <- coxph(Surv(Overall_survival, Event)~emt_group, data=clic_filtered)
+  surv_rls <- rbind(surv_rls, c(i,summary(fit)$coef[,2], summary(fit)$coef[,5]))
+}
+surv_rls <- surv_rls[-1,]
+```
+
+Ideally the best cutoff is 0.36
+
+```{r}
+plot(surv_rls[,1],surv_rls[,3], pch = 20); abline(h = 0.05)
+```
+
+## KM curves
+
+```{r}
+clic_filtered$emt_group <- NA
+clic_filtered$emt_group[clic_filtered$EMT <= 0.36] <- "low"
+clic_filtered$emt_group[clic_filtered$EMT > 0.36] <- "high"
+fit <- coxph(Surv(Overall_survival, Event)~emt_group+Summary_stage, data=clic_filtered)
+summary(fit)
+```
+
+```{r}
+table(clic_filtered$emt_group)
+```
+
+28 out of 122 (i.e. 23% patients are classified as EMT-high)
+
+```{r kmcurve-earlystage, fig.height=6, fig.width=4.5}
+fit1 <- survfit(Surv(Overall_survival, Event)~emt_group, data = clic_filtered[clic_filtered$Summary_stage == "early",])
+# ggsurvplot(fit1, data = clic_filtered, pval = T, risk.table = F)
+# ggsave("plots/HHcohort_earlyStage_EMTgroup_KMcurve20200122.pdf", width = 6,height = 5)
+
+ggsurvplot(fit1, data = clic_filtered, pval = T, risk.table = T)
+# ggsave("plots/HHcohort_earlyStage_EMTgroup_riskTable20200122.pdf", width = 6,height = 2)
+```
+
+```{r km-curve-latestage, fig.height=6, fig.width=4.5}
+fit1 <- survfit(Surv(Overall_survival, Event)~emt_group, data = clic_filtered[clic_filtered$Summary_stage == "late",])
+# ggsurvplot(fit1, data = clic_filtered, pval = T, risk.table = F)
+# ggsave("plots/HHcohort_lateStage_EMTgroup_KMcurve20200122.pdf", width = 6,height = 5)
+
+ggsurvplot(fit1, data = clic_filtered, pval = T, risk.table = T)
+# ggsave("plots/HHcohort_lateStage_EMTgroup_riskTable20200122.pdf", width = 6,height = 2)
+```
+
+
+# Compare Imperial, TCGA and AOCS
+
+```{r}
+path <- "~/OneDrive - OnTheHub - The University of Oxford/Project scRNAseq analysis/A_SmartSeq2/man_analysis2_20180629/R_deconvolution/rds"
+tcga_eset <- readRDS(paste(path, "/20181029TCGA_eset.rds", sep = ""))
+aocs_eset <- readRDS(paste(path, "/20181029_tothill_eset.rds", sep = ""))
+aocs_dec <- readRDS("~/OneDrive - OnTheHub - The University of Oxford/Project scRNAseq analysis/A_SmartSeq2/revision_analysis_20190827/R_deconvolution/results/20190502Deconvolution_Tothill.rds")
+cod_esets <- readRDS(paste(path, "/20190213CuratedOvarianData_esets.rds", sep = ""))
+# write.table(na.omit(expm1(cod_esets[[7]]@assayData$exprs)), row.names = T, file = "../CuratedOvarianData/GSE51088_expm1_exprs.txt", sep = "\t", quote = F)
+```
+
+```{r clean-public-datasets}
+aocs_eset$OS.time <- aocs_eset$time.to.death
+aocs_eset$OS <- NA
+aocs_eset$OS[aocs_eset$patient.status == "D"] <- 1
+aocs_eset$OS[aocs_eset$patient.status %in% c("D*","PF","R")] <- 0
+
+cod_info <- rbind(cod_esets[[1]]@phenoData@data,
+                  cod_esets[[2]]@phenoData@data,
+                  cod_esets[[3]]@phenoData@data,
+                  cod_esets[[4]]@phenoData@data,
+                  cod_esets[[5]]@phenoData@data,
+                  cod_esets[[6]]@phenoData@data,
+                  cod_esets[[7]]@phenoData@data)
+
+sapply(cod_esets, ncol)
+
+database <- list("E.MTAB.386", "GSE13876", "GSE26193",
+              "GSE26712", "GSE32062.GPL6480",
+              "GSE49997", "GSE51088")
+
+cod_info$dataset <- unlist(mapply(database, sapply(cod_esets, ncol), FUN = function(x,y) return(rep(x = x, y))))
+cod_info <- cod_info[cod_info$sample_type %in% c("tumor","metastatic"),]
+cod_info <- cod_info[!is.na(cod_info$vital_status),]
+cod_info$os_binary[cod_info$vital_status == "living"] <- 0
+cod_info$os_binary[cod_info$vital_status == "deceased"] <- 1
+
+
+aocs_eset$summary_stage <- NA
+aocs_eset$summary_stage[aocs_eset$Stage %in% c("I","IA","IB","IC","IIA","IIB","IIC")] <-"early"
+aocs_eset$summary_stage[aocs_eset$Stage %in% c("III","IIIA","IIIB","IIIC","IV")] <- "late"
+aocs_eset$EMT <- aocs_dec[,"EMT"]
+
+tcga_eset$stage <- NA
+tcga_eset$stage[tcga_eset$clinical_stage %in% c("Stage IA", "Stage IB", "Stage IC", "Stage IIA", "Stage IIB", "Stage IIC")] <- "early"
+tcga_eset$stage[tcga_eset$clinical_stage %in% c("Stage IIIA", "Stage IIIB", "Stage IIIC", "Stage IV")] <- "late"
+```
+
+
+```{r, fig.width=6, fig.height=5}
+df <- data.frame(OS.time = c(clic_filtered$Overall_survival, tcga_eset$OS.time, aocs_eset$OS.time*30, cod_info$days_to_death),
+                 OS = c(clic_filtered$Event, tcga_eset$OS, aocs_eset$OS, cod_info$os_binary),
+                 # emt_new = c(clic_dt$emt_new,eset$emt_new, aocs_eset$emt_new),
+                 dataset = c(rep("HH",nrow(clic_filtered)), rep("TCGA", ncol(tcga_eset)), rep("AOCS", ncol(aocs_eset)), cod_info$dataset),
+                 stage = c(clic_filtered$Summary_stage, tcga_eset$stag, aocs_eset$summary_stage, cod_info$summarystage))
+fit1 <- survfit(Surv(OS.time, OS)~dataset, df[df$stage == "late",])
+ggsurvplot(fit1, df[df$stage == "late",], pval = T, risk.table = F )
+
+# ggsave("plots/compare_OS_acrossDataset20200122.pdf", width = 12, height = 9)
+```
+
+```{r, fig.width=6, fig.height=5}
+df <- df[1:715,]
+fit1 <- survfit(Surv(OS.time, OS)~dataset, df[df$stage == "late",])
+ggsurvplot(fit1, df[df$stage == "late",], pval = T, risk.table = F )
+# ggsave("plots/compare_OS_acrossDataset_tcga_aocs20200122.pdf", width = 8, height = 6)
+```
+
+# Low-grade = ciliated
+
+```{r Low-grade-ciliated, fig.height=4, fig.width=3}
+ggplot(clic_filtered, aes(x = Summary_grade, y = Ciliated)) + 
+    geom_violin(scale = "width") + geom_boxplot(width = 0.1) + geom_jitter(alpha = 0.3) + 
+    ylab("Ciliated scores") + xlab("Grade") + theme_classic2()
+# ggsave("plots/compare_lowHighGrade20200122.pdf", width = 3, height = 3)
+```
+
+# Visualisation
+
+## Stacked barplot
+
+```{r Stacked barplot-preparedata}
+svr_fit_oxo <- clic_filtered[,25:29]
+svr_fit_new_diff <- svr_fit_oxo[svr_fit_oxo[,1] > 0.5,]
+svr_fit_new_diff <- svr_fit_new_diff[order(svr_fit_new_diff[,1], decreasing = F),]
+svr_fit_new_krt <- svr_fit_oxo[svr_fit_oxo[,2] > 0.5,]
+svr_fit_new_krt <- svr_fit_new_krt[order(svr_fit_new_krt[,2], decreasing = F),]
+svr_fit_new_emt <- svr_fit_oxo[svr_fit_oxo[,3] > 0.5,]
+svr_fit_new_emt <- svr_fit_new_emt[order(svr_fit_new_emt[,3], decreasing = F),]
+svr_fit_new_cc <- svr_fit_oxo[svr_fit_oxo[,4] > 0.5,]
+svr_fit_new_cc <- svr_fit_new_cc[order(svr_fit_new_cc[,4], decreasing = F),]
+
+svr_fit_new_others <- svr_fit_oxo[!rownames(svr_fit_oxo) %in% c(rownames(svr_fit_new_diff),rownames(svr_fit_new_krt),
+                                                               rownames(svr_fit_new_emt),rownames(svr_fit_new_cc)),]
+
+plot.data <- data.frame(sample = rep(rownames(svr_fit_oxo), 5),
+                        state = rep(c("Differentiated","KRT17","EMT","Cell cycle","Ciliated"), 
+                                    each = nrow(svr_fit_oxo)),
+                        score = c(svr_fit_oxo[,1],
+                                  svr_fit_oxo[,2],
+                                  svr_fit_oxo[,3],
+                                  svr_fit_oxo[,4],
+                                  svr_fit_oxo[,5]))
+plot.data$sample <- factor(plot.data$sample, levels = c(rownames(svr_fit_new_diff),rownames(svr_fit_new_krt),
+                                                               rownames(svr_fit_new_emt),rownames(svr_fit_new_cc),
+                                                        rownames(svr_fit_new_others)))
+plot.data$state <- factor(plot.data$state, levels = c("Differentiated","KRT17","EMT","Cell cycle","Ciliated"))
+# differentiated #A16BA3
+# F6A000 KRT7
+# FFDE00 EMT
+# CC #4DD9FF
+#F3A1B6 Ciliated
+```
+
+```{r, fig.width=10, fig.height=3}
+ggplot(plot.data) + geom_bar(aes(y = score, x = sample, fill = state),
+                           stat="identity") + theme_classic() + 
+  scale_fill_manual(values = c("#A16BA3","#F6A000","#FFDE00","#4DD9FF","#F3A1B6"), 
+                    breaks = c("Differentiated","KRT17","EMT","Cell cycle","Ciliated"), 
+                    labels = c("Differentiated","KRT17","EMT","Cell cycle","Ciliated")) +
+  xlab("Bulk tumour samples \n (each column is one tumour case)") + ylab("Proportions of cell states") +
+  theme(axis.ticks.x  = element_blank(), axis.text.x = element_blank(),
+        axis.text.y = element_text(size = 12),
+        axis.title = element_text(size= 15),
+        legend.text = element_text(size = 12),
+        legend.title  = element_blank(),
+        axis.line = element_line(size = 0.8)) 
+
+# ggsave("plots/HHcohort_stackedBarplot_20200122.pdf", width = 10, height = 3)
+```
+
+## PCA plot
+
+```{r, fig.width=10, fig.height=7}
+m_pc <- prcomp(t(log1p(counts[,match(rownames(clic_filtered), colnames(counts))])))
+
+clic_filtered$PC1 <- m_pc$x[,1]
+clic_filtered$PC2 <- m_pc$x[,2]
+
+
+p1 <- ggplot(clic_filtered, aes(x = PC1, y = PC2, fill = EMT)) + geom_point(size = 2, pch = 21, col = "grey") + theme_classic() + 
+    scale_fill_viridis(option="inferno") + theme(axis.title = element_blank() , legend.text = element_text(size = 7))
+p2 <- ggplot(clic_filtered, aes(x = PC1, y = PC2, fill = Cell_cycle)) + geom_point(size = 2, pch = 21, col = "grey") + theme_classic() + 
+    scale_fill_viridis(option="inferno") + theme(axis.title = element_blank() , legend.text = element_text(size = 7))
+p3 <- ggplot(clic_filtered, aes(x = PC1, y = PC2, fill = Differentiated)) + geom_point(size = 2, pch = 21, col = "grey") + theme_classic() + 
+    scale_fill_viridis(option="inferno") + theme(axis.title = element_blank() , legend.text = element_text(size = 7))
+p4 <- ggplot(clic_filtered, aes(x = PC1, y = PC2, fill = KRT17)) + geom_point(size = 2, pch = 21, col = "grey") + theme_classic() + 
+    scale_fill_viridis(option="inferno") + theme(axis.title = element_blank() , legend.text = element_text(size = 7))
+p5 <- ggplot(clic_filtered, aes(x = PC1, y = PC2, fill = Ciliated)) + geom_point(size = 2, pch = 21, col = "grey") + theme_classic() + 
+    scale_fill_viridis(option="inferno") + theme(axis.title = element_blank() , legend.text = element_text(size = 7))
+cowplot::plot_grid(p1,p2,p3,p4,p5, ncol = 3)
+# ggsave("plots/HHcohort_PCAplots_decovScores20200122.pdf", width = 10, height = 7)
+```
+
+# TCGA analysis
+
+```{r ca}
+tcga_fit <- read.csv("data/20191125TCGA_deconvolutionResults.csv", row.names = 1)
+```
+
+## LM22
+
+```{r}
+immune <- read.delim("data/CIBERSORT.Output_Job18.txt", row.names = 1)
+immune <- immune[match(rownames(tcga_fit), rownames(immune)),]
+```
+
+```{r}
+LM22 <- read.delim("data/LM22.txt", as.is = T, row.names = 1)
+LM22_macrophage_markers <- names(which(apply(LM22, 1, which.max) == 16))
+LM22_macrophage_markers
+```
+
+### Correlation analysis
+
+```{r}
+cor.rls <- t(cor(tcga_fit[,1:5], immune[,1:22]))
+# pdf("plots/TCGA_cortest_LM22_20200122.pdf")
+pheatmap::pheatmap(cor.rls, display_numbers = round(cor.rls,1), cellheight = 12, cellwidth = 30)
+# dev.off()
+```
+
+```{r}
+LM22_macrophage_markers <- unique(c(LM22_macrophage_markers, "CD163","TGM2"))
+
+cor_res <- c()
+for(itor_gene in LM22_macrophage_markers){
+    if(itor_gene %in% rownames(tcga_eset)){
+        
+        tmp <- cor(tcga_fit[,"EMT"], log1p(tcga_eset@assayData$exprs[itor_gene,]))
+        cor_res <- rbind(cor_res, c(itor_gene, tmp))
+    }
+}
+cor_res <- data.frame(gene = cor_res[,1],
+                      cor = as.numeric(cor_res[,2]))
+cor_res <- cor_res[order(cor_res$cor, decreasing = T),]
+cor_res$sign <- cor_res$cor > 0
+cor_res$gene <- factor(cor_res$gene, levels = cor_res$gene)
+```
+
+
+The expression levels of most of the macrophage M2 markers have a positive correlation with the EMT score.
+
+```{r correlation_plot, fig.width=8, fig.height=3}
+ggplot(cor_res, aes(x = gene, y = cor, fill = sign)) + geom_bar(stat = "identity") + theme_classic2() + theme(legend.position = "none", axis.text.x = element_text(angle = 30, vjust = 0.5, hjust = 0.5)) + xlab("") + ylab("Correlation with EMT scores")
+
+# ggsave("plots/TCGAcorrelation_barplot_M2markers20200122.pdf", width = 8, height = 5)
+```
+
+
+
+```{r}
+cor(tcga_eset@assayData$exprs["SPARC",], tcga_eset@assayData$exprs["CD163",])
+```
+
+### Linear regression
+
+linear relationship exists between macrophage M2 marker CD163 and EMT marker SPARC
+
+```{r}
+lr_res <- lm(log10(tcga_eset@assayData$exprs["CD163",]+1) ~log10(tcga_eset@assayData$exprs["SPARC",]+1))
+summary(lr_res)
+```
+
+```{r}
+df_plot <- data.frame(SPARC = log10(tcga_eset@assayData$exprs["SPARC",] + 1),
+                      CD163 = log10(tcga_eset@assayData$exprs["CD163",] + 1))
+
+ggplot(df_plot, aes(x = SPARC, y = CD163))  + geom_abline(slope = lr_res$coefficients[2], intercept = lr_res$coefficients[1], col = "red")+ geom_point(alpha = .6) + theme_linedraw() + xlim(3,6) + ylim(1,4)
+# ggsave("plots/TCGA_linearRes_scatter_CD163vsSPARC20200122.pdf", width = 5, height = 5)
+```
+
+
+```{r}
+# res <- c()
+# for(i in 1:nrow(tcga_eset@assayData$exprs)){
+#     tmp <- lm(log10(tcga_eset@assayData$exprs["CD163",] +1)~log10(tcga_eset@assayData$exprs[i,] +1))
+#     res <- cbind(res, tmp$coefficients[2])
+# }
+# res
+```
+
+### t test
+
+```{r}
+df <- cbind(tcga_fit[,1:5], immune)
+df$EMT.group <- "EMT-middle"
+df$EMT.group[df$EMT < quantile(df$EMT, 1/3)] <- "EMT-low"
+df$EMT.group[df$EMT > quantile(df$EMT, 2/3)] <- "EMT-high"
+df$EMT.group <- factor(df$EMT.group, levels = c("EMT-low", "EMT-middle", "EMT-high"))
+
+df$KRT17.group <- "KRT17-middle"
+df$KRT17.group[df$KRT17 <= quantile(df$KRT17, 1/3)] <- "KRT17-low"
+df$KRT17.group[df$KRT17 > quantile(df$KRT17, 2/3)] <- "KRT17-high"
+df$KRT17.group <- factor(df$KRT17.group, levels = c("KRT17-low", "KRT17-middle", "KRT17-high"))
+```
+
+
+```{r}
+ggplot(df, aes(x = EMT.group, y =  Macrophages.M2)) + geom_violin(scale = "area") + 
+    geom_boxplot(width = 0.2) + geom_beeswarm(alpha = 0.4) + theme_classic2()
+# ggsave("plots/TCGA_EMTgroup_versus_macrophageM2.pdf", width = 4, height = 5)
+```
+
+```{r}
+t.test(df$Macrophages.M2[df$EMT.group == "EMT-high"], df$Macrophages.M2[df$EMT.group == "EMT-low"], alternative = "greater")
+```
+
+## LM6
+
+```{r}
+immune2 <- read.delim("data/CIBERSORT.Output_Job19.txt", row.names = 1)
+immune2 <- immune2[match(rownames(tcga_fit), rownames(immune2)),]
+```
+
+### Correlation test
+
+```{r}
+cor.rls2 <- t(cor(tcga_fit[,1:5], immune2[,1:6]))
+# pdf("plots/TCGA_cortest_LM6_20200122.pdf")
+pheatmap::pheatmap(cor.rls2, display_numbers = round(cor.rls2,1), cellheight = 12, cellwidth = 30)
+# dev.off()
+```
+
+### t-test
+
+```{r}
+df <- cbind(tcga_fit[,1:5], immune2)
+df$EMT.group <- "EMT-middle"
+df$EMT.group[df$EMT < quantile(df$EMT, 1/3)] <- "EMT-low"
+df$EMT.group[df$EMT > quantile(df$EMT, 2/3)] <- "EMT-high"
+df$EMT.group <- factor(df$EMT.group, levels = c("EMT-low", "EMT-middle", "EMT-high"))
+
+df$KRT17.group <- "KRT17-middle"
+df$KRT17.group[df$KRT17 <= quantile(df$KRT17, 1/3)] <- "KRT17-low"
+df$KRT17.group[df$KRT17 > quantile(df$KRT17, 2/3)] <- "KRT17-high"
+df$KRT17.group <- factor(df$KRT17.group, levels = c("KRT17-low", "KRT17-middle", "KRT17-high"))
+```
+
+```{r}
+ggplot(df, aes(x = EMT.group, y =  Monocytes)) + geom_violin(scale = "area") + 
+    geom_boxplot(width = 0.2) + geom_beeswarm(alpha = 0.4) + theme_classic2()
+ # ggsave("plots/TCGA_EMTgroup_versus_monocytes.pdf", width = 4, height = 5)
+```
+
+```{r}
+t.test(df$Monocytes[df$EMT.group == "EMT-high"], df$Monocytes[df$EMT.group == "EMT-low"], alternative = "greater")
+```
+
+## Survival analysis
+
+```{r}
+tcga_eset$EMT <- tcga_fit$EMT[match(colnames(tcga_eset), rownames(tcga_fit))]
+tcga_eset$MacrophageM2 <- immune$Macrophages.M2[match(colnames(tcga_eset), rownames(immune))]
+tcga_eset$Monocyte <- immune2$Monocytes[match(colnames(tcga_eset), rownames(immune2))]
+df <- data.frame(OS = tcga_eset$OS,
+                 OS.time = tcga_eset$OS.time,
+                 EMT = tcga_eset$EMT,
+                 stage = as.factor(tcga_eset$stage),
+                 MacrophageM2 = tcga_eset$MacrophageM2,
+                 Monocyte = tcga_eset$Monocyte,
+                 CD163 = tcga_eset@assayData$exprs["CD163",],
+                 CD209 = tcga_eset@assayData$exprs["CD209",],
+                 SPARC = tcga_eset@assayData$exprs["SPARC",])
+df$CD163b <- NA
+df$CD163b[df$CD163 > quantile(df$CD163, 0.8)] <- "CD163-high"
+df$CD163b[df$CD163 <= quantile(df$CD163, 0.8)] <- "CD163-low"
+
+df$EMTb <- NA
+df$EMTb[df$EMT > quantile(df$EMT, 0.5)] <- "EMT-high"
+df$EMTb[df$EMT <= quantile(df$EMT, 0.5)] <- "EMT-low"
+
+
+rownames(df) <- colnames(tcga_eset)
+surv_fit <- coxph(Surv(tcga_eset$OS.time,tcga_eset$OS)~ df$EMT + df$CD163 + df$stage)
+summary(surv_fit)
+```
+
+```{r}
+surv_fit <- coxph(Surv(tcga_eset$OS.time,tcga_eset$OS)~ df$EMT + df$MacrophageM2 + df$stage)
+summary(surv_fit)
+```
+
+Macrophage propotions slightly correlate with prognosis in TCGA.
+
+```{r}
+surv_fit <- coxph(Surv(tcga_eset$OS.time,tcga_eset$OS)~ df$MacrophageM2 + df$stage)
+summary(surv_fit)
+```
+
+
+
+```{r}
+chisq.test(table(df$CD163b, df$EMTb))
+```
+
+```{r}
+cor.test(df$CD163, df$EMT)
+```
+
+## CD163 & EMT
+
+A addictive effect observed in TCGA data.
+
+```{r}
+fit1 <- survfit(Surv(df$OS.time,df$OS)~df$CD163b+df$EMTb)
+ggsurvplot(fit1, df, pval = T, risk.table = T)
+```
+
+
+```{r}
+cor.test(df$CD163, df$Monocyte)
+```
+
+```{r}
+cor.test(df$CD163, df$MacrophageM2)
+```
+
+# AOCS
+
+## Cibersort result
+
+```{r}
+aocs_lm22 <- read.csv("results/CIBERSORT.Output_Job20_AOCS_LM22.csv")
+aocs_eset$macrophageM2 <- aocs_lm22$Macrophages.M2
+
+aocs_lm6 <- read.csv("results/CIBERSORT.Output_Job21_AOCS_LM6.csv")
+aocs_eset$monocyte <- aocs_lm6$Monocytes
+```
+
+
+## Correlation
+
+```{r}
+cor.rls <- t(cor(aocs_dec[,1:5], aocs_lm22[,2:23]))
+# pdf("plots/AOCS_cortest_LM22_20200131.pdf")
+pheatmap::pheatmap(cor.rls, display_numbers = round(cor.rls,1), cellheight = 12, cellwidth = 30)
+# dev.off()
+```
+
+
+```{r}
+cor.rls <- t(cor(aocs_dec[,1:5], aocs_lm6[,2:7]))
+# pdf("plots/TCGA_cortest_LM6_20200131.pdf")
+pheatmap::pheatmap(cor.rls, display_numbers = round(cor.rls,1), cellheight = 12, cellwidth = 30)
+# dev.off()
+```
+
+## t-test
+
+```{r}
+df <- cbind(aocs_dec[,1:5],aocs_lm22[,1:23])
+df$EMT.group <- "EMT-middle"
+df$EMT.group[df$EMT <= quantile(df$EMT, 1/3)] <- "EMT-low"
+df$EMT.group[df$EMT > quantile(df$EMT, 2/3)] <- "EMT-high"
+df$EMT.group <- factor(df$EMT.group, levels = c("EMT-low", "EMT-middle", "EMT-high"))
+
+ggplot(df, aes(x = EMT.group, y =  Macrophages.M2)) + geom_violin(scale = "width") + 
+    geom_boxplot(width = 0.1) + geom_jitter(alpha = 0.4) + theme_classic2()
+# ggsave("plots/AOCS_EMTgroup_versus_MacrophageM2.pdf", width = 4, height = 5)
+```
+
+```{r}
+t.test(df$Macrophages.M2[df$EMT.group == "EMT-high"], df$Macrophages.M2[df$EMT.group == "EMT-low"], alternative = "greater")
+```
+
+```{r}
+df <- cbind(aocs_dec[,1:5],aocs_lm6[,1:6])
+df$EMT.group <- "EMT-middle"
+df$EMT.group[df$EMT <= quantile(df$EMT, 1/3)] <- "EMT-low"
+df$EMT.group[df$EMT > quantile(df$EMT, 2/3)] <- "EMT-high"
+df$EMT.group <- factor(df$EMT.group, levels = c("EMT-low", "EMT-middle", "EMT-high"))
+
+ggplot(df, aes(x = EMT.group, y =  Monocytes)) + geom_violin(scale = "width") + 
+    geom_boxplot(width = 0.1) + geom_jitter(alpha = 0.4) + theme_classic2()
+# ggsave("plots/AOCS_EMTgroup_versus_Monocytes.pdf", width = 4, height = 5)
+```
+
+```{r}
+t.test(df$Monocytes[df$EMT.group == "EMT-high"], df$Monocytes[df$EMT.group == "EMT-low"], alternative = "greater")
+```
+
+Difference in the correlation test: technical issue?
+
+## Survival
+
+```{r}
+surv_fit <- coxph(Surv(aocs_eset$OS.time,aocs_eset$OS)~ aocs_eset$EMT + aocs_eset$summary_stage)
+summary(surv_fit)
+```
+
+CD163 is no longer associated with survival in AOCS data
+
+Where the TAMs are also matters? See https://ovarianresearch.biomedcentral.com/articles/10.1186/1757-2215-7-19
+
+Macrophage M2 proportions slightly correlates with survival in AOCS too.
+
+```{r}
+surv_fit <- coxph(Surv(aocs_eset$OS.time,aocs_eset$OS)~ aocs_eset$macrophageM2 + aocs_eset$summary_stage)
+summary(surv_fit)
+```
+
+# CuratedOvarianCancer
+
+```{r}
+
+```
+
+
+# Technical
+
+```{r}
+sessionInfo()
+
+
+# R version 3.6.1 (2019-07-05)
+# Platform: x86_64-apple-darwin15.6.0 (64-bit)
+# Running under: macOS Mojave 10.14.3
+# 
+# Matrix products: default
+# BLAS:   /System/Library/Frameworks/Accelerate.framework/Versions/A/Frameworks/vecLib.framework/Versions/A/libBLAS.dylib
+# LAPACK: /Library/Frameworks/R.framework/Versions/3.6/Resources/lib/libRlapack.dylib
+# 
+# locale:
+# [1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
+# 
+# attached base packages:
+# [1] stats4    parallel  stats     graphics  grDevices utils     datasets  methods   base     
+# 
+# other attached packages:
+#  [1] RColorBrewer_1.1-2    ggpubr_0.2.1          magrittr_1.5          cowplot_0.9.4         viridis_0.5.1        
+#  [6] viridisLite_0.3.0     ggrepel_0.8.1         ggbeeswarm_0.6.0      ggplot2_3.2.1         survival_2.44-1.1    
+# [11] preprocessCore_1.46.0 e1071_1.7-2           xbioc_0.1.17          AnnotationDbi_1.46.1  IRanges_2.18.3       
+# [16] S4Vectors_0.22.1      MASS_7.3-51.4         bseqsc_1.0            Biobase_2.44.0        BiocGenerics_0.30.0  
+# [21] csSAM_1.4             Rcpp_1.0.2           
+# 
+# loaded via a namespace (and not attached):
+#  [1] tsne_0.1-3         fs_1.3.1           usethis_1.5.0      devtools_2.0.2     bit64_0.9-7        doParallel_1.0.15 
+#  [7] rprojroot_1.3-2    tools_3.6.1        backports_1.1.5    utf8_1.1.4         R6_2.4.0           vipor_0.4.5       
+# [13] DBI_1.0.0          lazyeval_0.2.2     colorspace_1.4-1   withr_2.1.2        tidyselect_0.2.5   gridExtra_2.3     
+# [19] prettyunits_1.0.2  processx_3.3.1     bit_1.1-14         curl_3.3           compiler_3.6.1     cli_1.1.0         
+# [25] desc_1.2.0         pkgmaker_0.28      labeling_0.3       scales_1.0.0       callr_3.2.0        NMF_0.22          
+# [31] stringr_1.4.0      digest_0.6.22      pkgconfig_2.0.3    bibtex_0.4.2       sessioninfo_1.1.1  limma_3.40.6      
+# [37] readxl_1.3.1       rlang_0.4.1        rstudioapi_0.10    RSQLite_2.1.2      dendextend_1.12.0  dplyr_0.8.3       
+# [43] Formula_1.2-3      Matrix_1.2-17      fansi_0.4.0        munsell_0.5.0      stringi_1.4.3      yaml_2.2.0        
+# [49] edgeR_3.26.8       pkgbuild_1.0.3     plyr_1.8.4         grid_3.6.1         blob_1.2.0         crayon_1.3.4      
+# [55] lattice_0.20-38    splines_3.6.1      locfit_1.5-9.1     zeallot_0.1.0      knitr_1.23         ps_1.3.0          
+# [61] pillar_1.4.2       ggsignif_0.5.0     rngtools_1.4       reshape2_1.4.3     codetools_0.2-16   pkgload_1.0.2     
+# [67] glue_1.3.1         remotes_2.1.0      BiocManager_1.30.9 vctrs_0.2.0        foreach_1.4.7      cellranger_1.1.0  
+# [73] gtable_0.3.0       purrr_0.3.3        assertthat_0.2.1   xfun_0.8           gridBase_0.4-7     xtable_1.8-4      
+# [79] class_7.3-15       pheatmap_1.0.12    tibble_2.1.3       iterators_1.0.12   beeswarm_0.2.3     registry_0.5-1    
+# [85] memoise_1.1.0      cluster_2.1.0  
+```
