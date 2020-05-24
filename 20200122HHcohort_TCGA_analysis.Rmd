@@ -1,12 +1,11 @@
 ---
 title: "Deconvolution analysis of NanoString HH-cohort data"
 author: "Zhiyuan Hu"
-date: "31/10/2019"
+date: "31/10/2019 (last modified: `r Sys.Date()`)"
 output: 
-    html_document:
-        toc: true
-        number_sections: true
-        theme: united
+  prettydoc::html_pretty:
+    theme: architect
+    highlight: github
 ---
 
 
@@ -42,13 +41,18 @@ library(ggpubr)
 # library(limma)
 # library(copynumber)
 
-source("../nanostring/codings/modified_functions20190204.R")
+source("codings/modified_functions20190204.R")
 ```
 
+# Summary 
+
+An overall analysis including HH-cohort, TCGA and AOCS
 
 # Load data
 
 ```{r}
+# sig_matrix <- readRDS("../../Project scRNAseq analysis/A_SmartSeq2/man_analysis2_20180629/R_deconvolution/rds/20190213sig_matrix_new.rds")
+
 sig_matrix_new <-  read.csv("../TableS7_selected_signature_matrix_52genes20190204.csv", as.is = T, row.names = 1)
 sig_matrix_new <- as.matrix(sig_matrix_new)
 ```
@@ -125,11 +129,13 @@ sum(is.na(clic_filtered$Overall_survival)) # 6 dont have survival info
 clic_filtered <- clic_filtered[!is.na(clic_filtered$Overall_survival),]
 
 dim(clic_filtered)
+# write.csv(clic_filtered, "data/clinical_data_filtered.csv", row.names = F)
 ```
 
 # Survival analysis
 
 ## Single-variate analysis
+
 
 ```{r single-variate}
 surv_fit <- coxph(Surv(Overall_survival, Event)~EMT, data=as.data.frame(clic_filtered))
@@ -157,6 +163,25 @@ res_tb <- data.frame(Variate = c("EMT","Grade","Stage"),
 res_tb$Hazard_ratio[2] <- 1/res_tb$Hazard_ratio[2]
 res_tb[2, 4:5] <- 1/res_tb[2,c(5,4)]
 # write.csv(res_tb, "results/survival_Fitres_HH20191106.csv", row.names = F)
+knitr::kable(res_tb)
+```
+
+
+```{r multivariate-new}
+clic_filtered$`Residual_disease_0_optimal_1_sub-optimal` <- as.numeric(clic_filtered$`Residual_disease_0_optimal_1_sub-optimal`)
+surv_fit <- coxph(Surv(Overall_survival, Event)~EMT+Summary_grade+Summary_stage+ `Residual_disease_0_optimal_1_sub-optimal`, data=as.data.frame(clic_filtered)[,])
+summary(surv_fit)
+```
+
+```{r multivariate-res-table2}
+res_tb <- data.frame(Variate = c("EMT","Grade","Stage","Residual_disease"),
+                     Hazard_ratio = summary(surv_fit)$coefficients[,2],
+                     p = summary(surv_fit)$coefficients[,5],
+                     CI_low = summary(surv_fit)$conf.int[,3],
+                     CI_high = summary(surv_fit)$conf.int[,4])
+res_tb$Hazard_ratio[2] <- 1/res_tb$Hazard_ratio[2]
+res_tb[2, 4:5] <- 1/res_tb[2,c(5,4)]
+# write.csv(res_tb, "results/survival_Fitres_with_residualDisease_HH20200515.csv", row.names = F)
 knitr::kable(res_tb)
 ```
 
@@ -220,10 +245,10 @@ ggsurvplot(fit1, data = clic_filtered, pval = T, risk.table = T)
 # Compare Imperial, TCGA and AOCS
 
 ```{r}
-path <- "~/OneDrive - OnTheHub - The University of Oxford/Project scRNAseq analysis/A_SmartSeq2/man_analysis2_20180629/R_deconvolution/rds"
+path <- "~/OneDrive - Nexus365//Project scRNAseq analysis/A_SmartSeq2/man_analysis2_20180629/R_deconvolution/rds"
 tcga_eset <- readRDS(paste(path, "/20181029TCGA_eset.rds", sep = ""))
 aocs_eset <- readRDS(paste(path, "/20181029_tothill_eset.rds", sep = ""))
-aocs_dec <- readRDS("~/OneDrive - OnTheHub - The University of Oxford/Project scRNAseq analysis/A_SmartSeq2/revision_analysis_20190827/R_deconvolution/results/20190502Deconvolution_Tothill.rds")
+aocs_dec <- readRDS("~/OneDrive - Nexus365//Project scRNAseq analysis/A_SmartSeq2/revision_analysis_20190827/R_deconvolution/results/20190502Deconvolution_Tothill.rds")
 cod_esets <- readRDS(paste(path, "/20190213CuratedOvarianData_esets.rds", sep = ""))
 # write.table(na.omit(expm1(cod_esets[[7]]@assayData$exprs)), row.names = T, file = "../CuratedOvarianData/GSE51088_expm1_exprs.txt", sep = "\t", quote = F)
 ```
@@ -581,7 +606,7 @@ cor.test(df$CD163, df$EMT)
 
 A addictive effect observed in TCGA data.
 
-```{r}
+```{r, fig.width=10, fig.height=10}
 fit1 <- survfit(Surv(df$OS.time,df$OS)~df$CD163b+df$EMTb)
 ggsurvplot(fit1, df, pval = T, risk.table = T)
 ```
@@ -610,7 +635,7 @@ aocs_eset$monocyte <- aocs_lm6$Monocytes
 
 ## Correlation
 
-```{r}
+```{r, fig.height=14}
 cor.rls <- t(cor(aocs_dec[,1:5], aocs_lm22[,2:23]))
 # pdf("plots/AOCS_cortest_LM22_20200131.pdf")
 pheatmap::pheatmap(cor.rls, display_numbers = round(cor.rls,1), cellheight = 12, cellwidth = 30)

@@ -1,0 +1,240 @@
+---
+title: "Ciliated expression in low/high grade SOC"
+author: "Zhiyuan Hu"
+date: "25/02/2020 (last modified: `r Sys.Date()`)"
+output: 
+  prettydoc::html_pretty:
+    theme: architect
+    highlight: github
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(pROC)
+library(ggplot2)
+library(caret)
+```
+
+# Summary 
+
+This script aims to study the prediction power of expression of cilited markers on the subtyping of high-grade and low-grade serous ovarian tumours. 
+
+We performed the IHC on tissue arrays with CCDC17 and CAPS antibody. The tissue arrays were scanned with Aperio Slide Scanner and the expression scores were measured by the quPath software. Here, I will use logistic model and cross-validate to evaluate if the expression of CAPS and CCDC17 can predic the low-grade and high-grade tumours. 
+
+
+# CAPS IHC data
+
+```{r, fig.width=10, fig.height=3,fig.cap="Distribution of CAPS scores in TMAs"}
+df_caps <- read.csv("../../Ciliated_grade/CAPS TMA 19.7.2019.csv", as.is = T)
+df_caps$TMA[df_caps$TMA == "TA 172"] <- "CAPS 172"
+colnames(df_caps) <- gsub(pattern = "[..]", replacement = "_", x = colnames(df_caps))
+colnames(df_caps) <- gsub(pattern = "__", replacement = "_", x = colnames(df_caps))
+
+df_caps$ratio_tumour_1 <- df_caps$Num_Tumor_1_/df_caps$Num_Tumor
+df_caps$ratio_tumour_2 <- df_caps$Num_Tumor_2_/df_caps$Num_Tumor
+df_caps$ratio_tumour_3 <- df_caps$Num_Tumor_3_/df_caps$Num_Tumor
+
+ggplot(df_caps, aes(x = TMA, y = log2(Tumor_H_score + 1))) + 
+    geom_violin(scale = "width")  + geom_boxplot(width = 0.1) + 
+    geom_jitter(alpha = 0.4) + theme_classic() 
+```
+
+There are outliers in CAPS 182
+
+I will remove 180, 181, 182 from the analysis, as they were not defined as high-grade serous on the record to tissue arrays.
+
+
+```{r}
+# filter out some TMAs
+df_caps <- df_caps[df_caps$TMA %in% c("CAPS 170", "CAPS 171", "CAPS 172", "CAPS 173", "CAPS 178", "CAPS 183"),]
+table(df_caps$tumor_type)
+```
+
+
+
+
+
+We will use the logistic regression as shown in the below
+
+$$
+\log(\frac{p(x)}{1-p(x)})=\beta_{0}+\beta_{1}x_{1}+\beta_{2}x_{2}+\beta_{3}x_{3}
+$$
+
+https://daviddalpiaz.github.io/r4sl/logistic-regression.html#logistic-regression-with-glm
+
+in which the $x$ is whether the tumour is low or high grade. $x_1$, $x_2$ and $x_3$ represents the proportion of tumour cells expressing CAPS at +, ++ and +++.
+
+## ROC (Receiver operating characteristic) curve
+
+```{r}
+set.seed(34521)
+idx <- createDataPartition(df_caps$tumor_type, times = 2, p = 0.6)
+```
+
+```{r, fig.height=4, fig.width=4}
+training_dt <- df_caps[idx$Resample1,]
+testing_dt <- df_caps[-idx$Resample1,]
+
+## Logistic regression
+model_glm = glm(tumor_type ~ ratio_tumour_1 + ratio_tumour_2 + ratio_tumour_3, data = training_dt, family = "binomial")
+model_glm_pred = ifelse(predict(model_glm, type = "link") > 0, 1, 0)
+
+train_tab = table(predicted = model_glm_pred, actual = training_dt$tumor_type)
+
+train_con_mat = caret::confusionMatrix(train_tab)
+c(train_con_mat$overall["Accuracy"],
+  train_con_mat$byClass["Sensitivity"],
+  train_con_mat$byClass["Specificity"])
+
+# ROC
+test_prob = predict(model_glm, newdata = testing_dt, type = "response")
+# pdf("plots/IHC_CAPS_ROC_20200508.pdf")
+roc(testing_dt$tumor_type, test_prob, plot = TRUE, print.auc = TRUE, legacy.axes=TRUE)
+# dev.off()
+```
+
+## Cross validation
+
+I created a 10-fold cross validation. For each time, one tenth samples are used as the testing set, while the others are in the training set.
+
+
+```{r}
+set.seed(34521)
+idx <- createFolds(df_caps$tumor_type, k = 8)
+```
+
+```{r, message=F}
+test_roc_list <- list()
+model_list <- list()
+
+for(itor in 1:length(idx)) {
+    
+    training_dt <- df_caps[-idx[[itor]],]
+    testing_dt <- df_caps[idx[[itor]],]
+    
+    ## Logistic regression
+    model_glm = glm(tumor_type ~ ratio_tumour_1 + ratio_tumour_2 + ratio_tumour_3, data = training_dt, family = "binomial")
+    model_list[[itor]] <- model_glm
+    
+    # ROC
+    test_prob <- predict(model_glm, newdata = testing_dt, type = "response")
+    test_roc_list[[itor]] <- roc(testing_dt$tumor_type ~ test_prob, plot = F, print.auc = F)
+}
+```
+
+```{r}
+model_list[[5]]$coefficients
+```
+
+Distribution of AUC values
+
+```{r}
+# distribution of AUCs
+sapply(test_roc_list, function(x) return(x$auc))
+```
+
+```{r}
+median(sapply(test_roc_list, function(x) return(x$auc)))
+```
+
+
+
+# CCDC17
+
+```{r, fig.width=10, fig.height=3,fig.cap="Distribution of CCDC17 scores in TMAs"}
+df_CCDC17 <- read.csv("../../Ciliated_grade/CCDC17 TMA 23.03.2020.csv", as.is = T)
+colnames(df_CCDC17) <- gsub(pattern = "[..]", replacement = "_", x = colnames(df_CCDC17))
+colnames(df_CCDC17) <- gsub(pattern = "__", replacement = "_", x = colnames(df_CCDC17))
+
+df_CCDC17$ratio_tumour_1 <- df_CCDC17$Num_Tumor_1_/df_CCDC17$Num_Tumor
+df_CCDC17$ratio_tumour_2 <- df_CCDC17$Num_Tumor_2_/df_CCDC17$Num_Tumor
+df_CCDC17$ratio_tumour_3 <- df_CCDC17$Num_Tumor_3_/df_CCDC17$Num_Tumor
+
+df_CCDC17$TMA <- as.factor(df_CCDC17$TMA)
+
+ggplot(df_CCDC17, aes(x = TMA, y = log2(Tumor_H_score + 1))) + 
+    geom_violin(scale = "width")  + geom_boxplot(width = 0.1) + 
+    geom_jitter(alpha = 0.4)+ theme_classic() 
+```
+
+```{r}
+df_CCDC17 <- df_CCDC17[df_CCDC17$TMA %in% c("170", "171", "172", "173", "178", "183"),]
+table(df_CCDC17$tumor_type)
+```
+
+## ROC (Receiver operating characteristic) curve
+
+```{r}
+set.seed(34521)
+idx <- createDataPartition(df_CCDC17$tumor_type, times = 2, p = 0.6)
+```
+
+```{r, fig.height=4, fig.width=4}
+training_dt <- df_CCDC17[idx$Resample1,]
+testing_dt <- df_CCDC17[-idx$Resample1,]
+
+## Logistic regression
+model_glm = glm(tumor_type ~ ratio_tumour_1 + ratio_tumour_2 + ratio_tumour_3, data = training_dt, family = "binomial")
+model_glm_pred = ifelse(predict(model_glm, type = "link") > 0, 1, 0)
+
+train_tab = table(predicted = model_glm_pred, actual = training_dt$tumor_type)
+
+train_con_mat = caret::confusionMatrix(train_tab)
+c(train_con_mat$overall["Accuracy"],
+  train_con_mat$byClass["Sensitivity"],
+  train_con_mat$byClass["Specificity"])
+
+# ROC
+test_prob = predict(model_glm, newdata = testing_dt, type = "response")
+roc(testing_dt$tumor_type, test_prob, plot = TRUE, print.auc = TRUE, legacy.axes=TRUE)
+```
+
+## Cross validation
+
+```{r, message=F}
+set.seed(34521)
+idx <- createFolds(df_CCDC17$tumor_type, k = 8)
+
+test_roc_list <- list()
+model_list <- list()
+
+for(itor in 1:length(idx)) {
+    
+    training_dt <- df_CCDC17[-idx[[itor]],]
+    testing_dt <- df_CCDC17[idx[[itor]],]
+    
+    
+    
+    ## Logistic regression
+    model_glm = glm(tumor_type ~ ratio_tumour_1 + ratio_tumour_2 + ratio_tumour_3, data = training_dt, family = "binomial")
+    model_list[[itor]] <- model_glm
+    
+    # ROC
+    test_prob <- predict(model_glm, newdata = testing_dt, type = "response")
+    test_roc_list[[itor]] <- roc(testing_dt$tumor_type ~ test_prob, plot = F, print.auc = F)
+}
+```
+
+
+```{r}
+# distribution of AUCs
+sapply(test_roc_list, function(x) return(x$auc))
+```
+
+```{r}
+median(sapply(test_roc_list, function(x) return(x$auc)))
+```
+
+
+# Conclusions
+
+* CAPS IHC achieved a high AUC value for the cross validation, which is over 0.8
+* CCDC17 IHC is not ideal as the median of its AUC values is only around 0.56
+
+
+# Technical
+
+```{r}
+sessionInfo()
+```
+
