@@ -45,7 +45,7 @@ source("codings/modified_functions20190204.R")
 
 # Summary 
 
-This script aims to perform deconvolution & survival analysis on the HH-cohort and visualise the expression data as well as the deconvolution results.
+This script aims to perform survival analysis (both overall survival and progression-free survival) on the HH-cohort.
 
 # Load data
 
