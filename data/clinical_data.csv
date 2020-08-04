@@ -1,0 +1,151 @@
+﻿Anonymised code,Summary_stage,Summary_grade,Summary_histology,Residual disease 0_optimal 1_sub-optimal,BRCA status,Tumour site for DNA extraction
+HH-001,late,high,Serous,0,unknown,abdominal wall
+HH-002,late,high,Serous,0,unknown,ovary
+HH-003,early,high,Serous,0,unknown,left ovary
+HH-004,late,high,Serous,1,unknown,colon
+HH-005,late,high,Serous,0,unknown,ovary
+HH-006,late,,Serous,1,unknown,ovary
+HH-007,late,high,Serous,0,unknown,ovary
+HH-008,late,high,Serous,0,unknown,right ovary
+HH-009,late,high,Serous,0,BRCA1 mut,ovary
+HH-010,late,high,Serous,0,unknown,ovary
+HH-011,late,high,Serous,1,unknown,ovary
+HH-012,late,high,Serous,1,unknown,ovary
+HH-013,late,high,Serous,0,unknown,omentum
+HH-014,late,high,Serous,0,unknown,omentum
+HH-015,late,low,Serous,0,unknown,ovary
+HH-016,late,high,Serous,0,unknown,ovary
+HH-017,late,high,Serous,0,unknown,ovary
+HH-018,late,high,papillary serous adenocarcinoma,1,wild type,ovary
+HH-019,late,low,Serous,0,unknown,ovary
+HH-020,late,,Serous,0,wild type,ovary
+HH-021,late,,Serous,0,unknown,ovary
+HH-022,late,,Serous,0,BRCA 2,ovary
+HH-023,late,,Serous Papillary,0,unknown,omentum
+HH-024,late,,Serous,0,unknown,peritoneum
+HH-025,late,high,Serous Papillary,0,unknown,ovary
+HH-026,late,,Serous,0,unknown,ovary
+HH-027,late,,Serous Papillary,0,BRCA 1,ovary
+HH-028,late,,Serous Papillary,0,unknown,left parametrium
+HH-029,late,,Serous Papillary,0,wild type,ovary
+HH-030,late,,Serous Papillary,0,unknown,omentum
+HH-031,late,,Serous Papillary,0,wild type,right ovary
+HH-032,late,,Serous adenocarcinoma,0,wild type,omentum
+HH-033,late,,Serous,0,unknown,omentum
+HH-034,late,,Serous Papillary,0,unknown,left ovary
+HH-035,late,high,Serous,0,wild type,ovary
+HH-036,,high,Serous,NA,unknown,right ovary
+HH-037,late,high,Serous,1,unknown,left ovary
+HH-038,early,high,Serous,0,unknown,right ovary
+HH-039,late,low,Serous,NA,unknown,ovary
+HH-040,late,high,Serous,1,unknown,pelvic mass
+HH-041,late,high,Serous,1,unknown,ovary
+HH-042,late,high,Serous,0,unknown,ovary
+HH-043,early,high,Serous,0,unknown,ovary
+HH-044,late,low,Serous,0,unknown,ovary
+HH-045,early,low,Serous,0,unknown,ovary
+HH-046,late,high,Serous,0,unknown,ovary
+HH-047,late,high,Serous,0,unknown,omentum
+HH-048,early,low,Serous,0,unknown,ovary
+HH-049,early,high,Serous,0,unknown,ovary
+HH-050,late,high,Serous,1,unknown,right ovary
+HH-051,late,high,Serous,1,unknown,ovary
+HH-052,early,high,Serous,NA,unknown,ovary
+HH-053,late,high,Serous,0,unknown,right ovary
+HH-054,late,high,Serous,1,unknown,tumour
+HH-055,early,high,Serous,0,unknown,left ovary
+HH-056,late,high,Serous,NA,unknown,pelvic mass
+HH-057,early,high,Serous,0,wild type,left ovary
+HH-058,late,high,Serous,0,unknown,right ovary
+HH-059,late,high,Serous,NA,unknown,right ovary
+HH-060,late,high,Serous,1,wild type,ovary
+HH-061,late,high,Serous,0,wild type,ovary
+HH-062,late,high,Serous,1,unknown,ovary
+HH-063,late,high,Serous,1,unknown,ovary
+HH-064,late,high,Serous,0,wild type,right ovary
+HH-065,early,high,Serous,0,wild type,ovary
+HH-066,late,high,Serous,NA,unknown,ovary
+HH-067,late,high,Serous,1,unknown,ovary
+HH-068,late,high,Serous,0,unknown,bowel
+HH-069,early,high,Serous,0,unknown,ovary
+HH-070,late,high,Serous,1,wild type,ovary
+HH-071,late,high,Serous,1,unknown,ovary
+HH-072,late,high,Serous,NA,unknown,ovary
+HH-073,late,high,Serous,0,unknown,tumour
+HH-074,late,high,Serous,1,wild type,ovary
+HH-075,late,high,Serous,0,unknown,tumour
+HH-076,late,high,Serous,NA,unknown,ovary
+HH-077,late,high,Serous,0,unknown,ovary
+HH-078,late,high,Serous,0,unknown,ovary
+HH-079,late,high,Serous,NA,unknown,tumour
+HH-080,early,high,Serous,0,wild type,ovary
+HH-081,early,high,Serous,0,wild type,ovary
+HH-082,late,high,Serous,1,wild type,ovary
+HH-083,late,high,Serous,1,unknown,ovary
+HH-084,late,high,Serous,0,unknown,bowel
+HH-085,late,high,Serous,1,unknown,pelvic mass
+HH-086,late,high,Serous,0,wild type,ovary
+HH-087,late,high,Serous,0,unknown,ovary
+HH-088,early,high,Serous,0,unknown,ovary
+HH-089,late,high,Serous,0,wild type,tumour
+HH-090,early,high,Serous,NA,unknown,ovary
+HH-091,late,high,Serous,1,unknown,pelvic mass
+HH-092,early,high,Serous,0,wild type,ovary
+HH-093,late,high,Serous,0,BRCA 1,ovary
+HH-094,early,high,Serous,0,unknown,ovary
+HH-095,early,high,Serous,0,unknown,ovary
+HH-096,late,high,Serous,0,unknown,right ovary
+HH-097,late,high,Serous,0,unknown,left ovary
+HH-098,early,high,Serous,0,wild type,left obtturator lymph node
+HH-099,late,high,Serous,0,BRCA 2,ovary
+HH-100,late,high,Serous,0,unknown,left ovary
+HH-101,late,high,Serous,0,BRCA 1,ovary
+HH-102,late,high,Serous,0,unknown,tumour deposits
+HH-103,late,high,Serous,0,wild type,ovary
+HH-104,late,high,Serous,0,unknown,ovary
+HH-105,late,high,Serous,0,wild type,primary tumour
+HH-106,late,high,Serous,0,wild type,omentum
+HH-107,late,high,Serous,0,unknown,ovary
+HH-108,late,high,Serous,0,BRCA 1,ovary
+HH-109,late,,Serous,0,unknown,tumour
+HH-110,late,high,Serous adenocarcinoma,0,unknown,primary tumour
+HH-111,late,,Serous Papillary,0,wild type,ovary
+HH-112,late,,Serous,0,wild type,pelvic mass
+HH-113,late,high,Serous,NA,unknown,ovary
+HH-114,early,high,Serous,0,unknown,ovary
+HH-115,late,high,Serous,0,unknown,ovary
+HH-116,late,low,Serous,0,unknown,ovary
+HH-117,late,high,Serous,0,wild type,intra renal
+HH-118,late,high,Serous,0,unknown,omentum
+HH-119,late,high,Serous,0,unknown,omentum
+HH-120,late,high,Serous,0,unknown,omentum
+HH-121,late,high,Serous,0,unknown,omentum
+HH-122,late,high,Serous,0,unknown,omentum
+HH-123,late,high,Serous,0,wild type,omentum
+HH-124,late,high,Serous,0,BRCA2 mut,left ovary
+HH-125,late,high,Serous,0,unknown,omentum
+HH-126,late,high,Serous,0,unknown,primary tumour
+HH-127,late,high,Serous,0,BRCA1 mut,ovary
+HH-128,late,high,Serous,0,unknown,left ovary
+HH-129,late,high,Serous,0,BRCA2 mut,ovary
+HH-130,late,high,Serous,1,BRCA1 mut,primary tumour
+HH-131,late,high,Serous,0,wild type,primary tumour
+HH-132,late,high,Serous,0,unknown,primary tumour
+HH-133,late,high,Serous,0,unknown,primary tumour
+HH-134,late,high,Serous,0,wild type,right ovary
+HH-135,late,high,Serous,1,wild type,primary tumour
+HH-136,late,high,Serous,0,unknown,primary tumour
+HH-137,late,high,Serous,0,wild type,omentum
+HH-138,,high,Endometrial serous carcinoma,,unknown,primary tumour
+HH-139,late,high,Serous,0,wild type,primary tumour
+HH-140,late,high,Serous,0,BRCA1 mut,primary tumour
+HH-141,late,high,Serous,1,unknown,ovary
+HH-142,late,high,Serous,0,unknown,primary tumour
+HH-143,late,high,Serous,0,wild type,primary tumour
+HH-144,late,high,Serous,0,unknown,primary tumour
+HH-145,late,high,Serous,1,unknown,primary tumour
+HH-146,late,high,Serous,1,unknown,right ovary
+HH-147,late,high,Serous,0,BRCA 2,omentum
+HH-148,late,high,Serous,0,wild type,right ovary
+HH-149,late,high,Serous,1,BRCA 2,primary tumour
+HH-150,late,high,Serous,0,unknown,primary tumour

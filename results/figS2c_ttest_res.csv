@@ -1,0 +1,2 @@
+"p","mean.x","mean.y","method","alternative","data"
+1.97129869963725e-05,0.0967253980839565,0.0488035706285881,"Welch Two Sample t-test","greater","df$Macrophages.M2[df$EMT.group == ""EMT-high""] and df$Macrophages.M2[df$EMT.group == ""EMT-low""]"

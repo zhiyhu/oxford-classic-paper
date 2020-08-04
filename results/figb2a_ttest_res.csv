@@ -1,0 +1,2 @@
+"p","mean.x","mean.y","method","alternative","data"
+8.02097986071139e-12,0.52364213559899,0.364297002321008,"Welch Two Sample t-test","greater","df$Monocytes[df$EMT.group == ""EMT-high""] and df$Monocytes[df$EMT.group == ""EMT-low""]"
