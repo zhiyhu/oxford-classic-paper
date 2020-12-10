@@ -1,5 +1,6 @@
 library(ggplot2)
 library(ggpubr)
+
 # Figure 2D
 # This analysis is aimed to verify that the association between the macrophage M2 signature and the mesenchymal signature is reproducible in multiple independent datasets. See Figure 2D 
 
@@ -19,7 +20,7 @@ for(i in 1:9){
     df$r[i] <- rls$estimate
 }
 
-write.csv(df, "../results/fig2d_pearson_correlation.csv", row.names = FALSE)
+write.csv(df, "../results/figs5_pearson_correlation.csv", row.names = FALSE)
 
 
 ## ----prepare-data-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -56,6 +57,6 @@ ggplot(df_plot, aes(x = SPARC, y = CD163)) +
     facet_wrap(~name, scales = "free")  + theme_classic2() + xlab("Expression levels of SPARC") + 
     ylab("Expression levels of CD163") 
     
-ggsave("../results/fig2d.pdf", width = 6, height = 5)
+ggsave("../results/figs5.pdf", width = 6, height = 5)
 
 

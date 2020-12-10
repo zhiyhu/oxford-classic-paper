@@ -1,8 +1,11 @@
+# Figure 3c, d, S6
+
 library(pROC)
 library(ggplot2)
 library(caret)
 library(lattice)
 
+# Read data
 df_caps <- read.csv("../data/CAPS TMA 19.7.2019.csv", as.is = T)
 df_caps$TMA[df_caps$TMA == "TA 172"] <- "CAPS 172"
 colnames(df_caps) <- gsub(pattern = "[..]", replacement = "_", x = colnames(df_caps))
@@ -39,8 +42,7 @@ pdf("../results/fig3c.pdf")
 roc(testing_dt$tumor_type, test_prob, plot = TRUE, print.auc = TRUE, legacy.axes=TRUE)
 dev.off()
 
-## distribution of AUROC (figure 3d)
-
+## distribution of AUROC (figure 3d) -----
 set.seed(34521)
 idx <- createFolds(df_caps$tumor_type, k = 8)
 
@@ -61,7 +63,6 @@ for(itor in 1:length(idx)) {
     test_roc_list[[itor]] <- roc(testing_dt$tumor_type ~ test_prob, plot = F, print.auc = F)
 }
 
-
 auc_list <- data.frame(value = sapply(test_roc_list, function(x) return(x$auc)))
 p <- ggplot(auc_list, aes(x = value))
 # add command to produce a "faded" histogram and select the number of bins
@@ -72,3 +73,37 @@ p  +
 
 ggsave("../results/fig3d.pdf", width = 5, height = 3)
 
+# ROC (fig S6) ----
+caps_df <- read.csv("../data/Table S2 IHC_CAPS_data_updated.csv", as.is = TRUE)
+caps_df$disease <- "HG"
+caps_df$disease[caps_df$TMA %in% c("CAPS 172", "CAPS 173")] <- "LG"
+length(unique(caps_df$Patient[caps_df$disease == "LG"]))
+
+# ratio of positive cells
+caps_df$ratio_tumour_1 <- caps_df$Num_Tumor_1_/caps_df$Num_Tumor
+caps_df$ratio_tumour_2 <- caps_df$Num_Tumor_2_/caps_df$Num_Tumor
+caps_df$ratio_tumour_3 <- caps_df$Num_Tumor_3_/caps_df$Num_Tumor
+
+## training model
+df_patient <- data.frame(patient = caps_df$Patient, disease = caps_df$disease)
+df_patient <- unique(df_patient)
+df_patient <- na.omit(df_patient)
+
+library(caret)
+# splitting datasets
+set.seed(34521)
+idx <- createDataPartition(df_patient$disease, times = 1, p = 0.6)
+
+training_dt <- caps_df[caps_df$Patient %in% df_patient$patient[idx$Resample1],]
+testing_dt <- caps_df[!caps_df$Patient %in% df_patient$patient[idx$Resample1],]
+
+# Logistic regression
+model_glm = glm(disease == "LG" ~ ratio_tumour_1 + ratio_tumour_2 + ratio_tumour_3, data = training_dt, family = "binomial")
+model_glm_pred = ifelse(predict(model_glm, type = "link") > 0,"LG", "HG")
+
+train_tab = table(predicted = model_glm_pred, actual = training_dt$disease)
+library(pROC)
+test_prob = predict(model_glm, newdata = testing_dt, type = "response")
+pdf("../results/figS6.fig")
+roc(testing_dt$disease, test_prob, plot = TRUE, print.auc = TRUE, legacy.axes = TRUE)
+dev.off()

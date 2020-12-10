@@ -1,0 +1,4 @@
+# hash:sha256:76e804aca5b7de1c23fd46b07eaa13aad91e5b15144542492233878d66ae6fb4
+FROM registry.codeocean.com/codeocean/r-base:3.6.0-ubuntu18.04
+
+ARG DEBIAN_FRONTEND=noninteractive

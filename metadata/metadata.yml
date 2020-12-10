@@ -1,0 +1,10 @@
+metadata_version: 1
+name: oxford-classic-paper
+description: oxford-classic-paper
+authors:
+- name: Zhiyuan Hu
+  affiliations:
+  - name: University of Oxford
+corresponding_contributor:
+  name: Ahmed A. Ahmed
+  email: ahmed.ahmed@wrh.ox.ac.uk

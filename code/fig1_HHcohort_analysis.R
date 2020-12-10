@@ -4,13 +4,6 @@ library(viridis)
 library(ggplot2)
 library(pheatmap)
 
-# Figure 1C
-# Figure 1D
-# Table 2
-# Table S1
-
-# Analysis of the HH-cohort, including visualisation (Fig 1C and D) and survial analysis (Table 2 and Table S1)
-
 
 ## ----read data--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 ## signature matrix
@@ -91,14 +84,11 @@ df_plot <- t ( scale(t(df_plot + .5), center = T, scale = T))
 df_plot[df_plot >= 5 ] <- 5
 df_plot[df_plot <  -2 ] <- -2
 
-
 pheatmap(df_plot,color = inferno(50),
-         filename = '../results/fig1c.png',
+         filename = '../results/fig1c.pdf',
                    show_colnames = FALSE,
                    scale = 'none', cluster_cols = F, 
                    cluster_rows = F)
-
-
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
