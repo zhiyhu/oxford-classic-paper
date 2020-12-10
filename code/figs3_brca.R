@@ -3,9 +3,7 @@
 library(survminer)
 library(survival)
 library(ggplot2)
-library(Biobase)
 library(ggbeeswarm)
-library(data.table)
 
 # Read TCGA data ----
 tcga_fit <- read.csv("../data/20191125TCGA_deconvolutionResults.csv", row.names = 1)

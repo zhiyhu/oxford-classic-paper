@@ -1,16 +1,10 @@
 ## Figure S2
 # Correlation analysis between RNA-seq data and NanoString readout
 # Zhiyuan Hu
-# 9 Oct 2020; last modify 9 Oct 2020
-
-library(MASS)
-library(xbioc)
-library(e1071) #svm
-library(preprocessCore)
+# 9 Oct 2020; last modify 10 Dec 2020
 
 library(ggplot2)
 library(cowplot)
-library(edgeR)
 
 # read nanostring data
 ns_data <- read.csv("../data/OXOPCR_normalised_data.csv", as.is = TRUE, row.names = 1)
